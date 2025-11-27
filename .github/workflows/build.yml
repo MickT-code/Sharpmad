@@ -2,31 +2,53 @@ name: Build SharpMad
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:   # <-- hiermee kan je de workflow handmatig starten
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '7.0.x'
+    - name: Install .NET Framework 3.5 Developer Pack
+      shell: pwsh
+      run: |
+        Write-Host "Downloading .NET Framework 3.5 Developer Pack..."
+        $url = "https://download.microsoft.com/download/1/1/0/110C6A0D-06F0-43F0-BE77-9F2DA8DB48B6/ndp35-devpack-enu.exe"
+        $installer = "$env:TEMP\ndp35-devpack.exe"
 
-    - name: Restore dependencies
-      run: dotnet restore Sharpmad.sln
+        Invoke-WebRequest -Uri $url -OutFile $installer
 
-    - name: Build project
-      run: dotnet build Sharpmad.sln --configuration Release
+        Write-Host "Installing .NET Framework 3.5 Developer Pack (this may take several minutes)..."
+        Start-Process -FilePath $installer -ArgumentList "/quiet", "/norestart" -Wait
+        Write-Host "Installation complete!"
 
-    - name: Upload SharpMad.exe
+    - name: Verify reference assemblies
+      shell: pwsh
+      run: |
+        $refPath = "C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v3.5"
+        if (Test-Path $refPath) {
+          Write-Host "Reference assemblies found!"
+        } else {
+          Write-Error ".NET 3.5 reference assemblies NOT found. Build will fail!"
+        }
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build Sharpmad (Release)
+      shell: pwsh
+      run: |
+        msbuild Sharpmad.sln /p:Configuration=Release
+
+    - name: Upload build artifacts (EXE)
       uses: actions/upload-artifact@v4
       with:
-        name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        name: Sharpmad-Release
+        path: |
+          **/bin/Release/**

@@ -8,13 +8,37 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # windows-2019 heeft vaker de legacy .NET features beschikbaar of makkelijker te activeren.
+    runs-on: windows-2019
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup .NET
+    - name: Enable .NET Framework 3.5 (NetFx3)
+      shell: powershell
+      run: |
+        Write-Host "Enabling .NET Framework 3.5 feature (NetFx3)..."
+        dism /online /enable-feature /featurename:NetFx3 /All /Quiet /NoRestart
+        # wacht even en controleer of het is ingeschakeld
+        $key = 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v3.5'
+        if (-Not (Test-Path $key)) {
+          Write-Host "Waarschuwing: v3.5 registry key niet gevonden; Targeting Pack kan nog ontbreken."
+        } else {
+          Write-Host ".NET Framework 3.5 lijkt aanwezig."
+        }
+
+    # Optioneel: als je MSB3644 blijft krijgen, decommentarieer de volgende stap om Visual Studio Build Tools te installeren.
+    # Let op: dit voegt ~10+ minuten aan runtime toe.
+    #
+    # - name: Install Visual Studio Build Tools (optioneel - voor reference assemblies / targeting packs)
+    #   shell: powershell
+    #   run: |
+    #     choco install visualstudio2019buildtools -y --no-progress
+    #     # je kunt hier extra installargs toevoegen om specifieke workloads te installeren
+    #     # bijv: --installargs "'--add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --includeRecommended --quiet'"
+
+    - name: Setup .NET (dotnet CLI used for SDK tools)
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '7.0.x'

@@ -1,6 +1,9 @@
 name: Build SharpMad
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -8,17 +11,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout
+    - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '7.0.x'
 
-    - name: Build
-      run: msbuild Sharpmad.sln /p:Configuration=Release
+    - name: Restore dependencies
+      run: dotnet restore Sharpmad/Sharpmad.sln
 
-    - name: Upload Artifact
+    - name: Build project
+      run: dotnet build Sharpmad/Sharpmad.sln --configuration Release
+
+    - name: Upload SharpMad.exe
       uses: actions/upload-artifact@v3
       with:
         name: SharpMad
-        path: Sharpmad\\bin\\Release\\SharpMad.exe
+        path: Sharpmad/Sharpmad/bin/Release/net7.0/Sharpmad.exe

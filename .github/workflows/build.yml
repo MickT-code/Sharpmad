@@ -1,32 +1,36 @@
-name: Build SharpMad
+name: Build SharpMad Workflow 21
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:   # handmatig starten altijd mogelijk
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '7.0.x'
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
 
-    - name: Restore dependencies
-      run: dotnet restore Sharpmad.sln
+    - name: Restore NuGet packages (if any)
+      shell: pwsh
+      run: |
+        dotnet restore Sharpmad.sln
 
-    - name: Build project
-      run: dotnet build Sharpmad.sln --configuration Release
+    - name: Build Sharpmad (Release)
+      shell: pwsh
+      run: |
+        msbuild Sharpmad.sln /p:Configuration=Release
 
-    - name: Upload SharpMad.exe
+    - name: Upload EXE artifact
       uses: actions/upload-artifact@v4
       with:
-        name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        name: Sharpmad-Release
+        path: |
+          bin/**/*.exe   # pakt alle EXE's in bin en subfolders

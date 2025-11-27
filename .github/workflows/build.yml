@@ -8,13 +8,36 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup .NET
+    - name: Enable .NET Framework 3.5 (NetFx3) via DISM
+      shell: powershell
+      run: |
+        Write-Host "Trying to enable .NET Framework 3.5 (NetFx3)..."
+        dism /online /enable-feature /featurename:NetFx3 /All /Quiet /NoRestart
+        Start-Sleep -Seconds 5
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v3.5') {
+          Write-Host ".NET Framework 3.5 registry key found."
+        } else {
+          Write-Host "Warning: v3.5 registry key not found. Targeting/Reference assemblies may still be missing."
+        }
+
+    - name: Install Visual Studio 2022 Build Tools (adds .NET 3.5 targeting/reference assemblies)
+      # OPTIONAL but recommended if MSB3644 persists. Costs extra time.
+      shell: powershell
+      env:
+        CHOCO_NO_PROGRESS: 'true'
+      run: |
+        Write-Host "Installing Visual Studio 2022 Build Tools + Managed Desktop workload + .NET 3.5 dev tools (may take 10+ minutes)..."
+        # use the Visual Studio 2022 Build Tools package from Chocolatey
+        choco install visualstudio2022buildtools -y --no-progress --package-parameters "'--add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.3.5.DeveloperTools --quiet'"
+        Write-Host "Visual Studio Build Tools installation finished (check logs for errors)."
+
+    - name: Setup .NET SDK for CLI tasks
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '7.0.x'
@@ -29,4 +52,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        path: Sharpmad/bin/Release/**/Sharpmad.exe

@@ -4,17 +4,60 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 60
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup .NET
+    - name: Enable .NET Framework 3.5 via DISM
+      shell: powershell
+      run: |
+        Write-Host "Enabling NetFx3 feature..."
+        dism /online /enable-feature /featurename:NetFx3 /All /Quiet /NoRestart
+        Start-Sleep -Seconds 5
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v3.5') {
+            Write-Host ".NET Framework 3.5 registry key found."
+        } else {
+            Write-Host "Warning: v3.5 registry key not found."
+        }
+
+    - name: Check for .NET 3.5 reference assemblies
+      id: checkref
+      shell: powershell
+      run: |
+        $refPath = 'C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v3.5'
+        Write-Host "Checking reference assemblies at $refPath"
+        if (Test-Path $refPath) {
+            Write-Host "Reference assemblies FOUND."
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "present=true"
+        } else {
+            Write-Host "Reference assemblies MISSING."
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "present=false"
+        }
+
+    - name: Install .NET Framework 3.5 Developer Pack via Chocolatey
+      if: steps.checkref.outputs.present == 'false'
+      shell: powershell
+      run: |
+        Write-Host "Installing .NET Framework 3.5 Developer Pack via Chocolatey..."
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        choco install netfx-3.5-devpack -y
+        Write-Host ".NET Framework 3.5 Developer Pack installation finished."
+
+    - name: Setup .NET SDK
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '7.0.x'
@@ -29,4 +72,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        path: Sharpmad/bin/Release/**/Sharpmad.exe

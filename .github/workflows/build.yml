@@ -4,17 +4,87 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 60
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Setup .NET
+    - name: Enable .NET Framework 3.5 via DISM
+      shell: powershell
+      run: |
+        Write-Host "Enabling NetFx3 feature..."
+        dism /online /enable-feature /featurename:NetFx3 /All /Quiet /NoRestart
+        Start-Sleep -Seconds 5
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v3.5') {
+          Write-Host ".NET Framework 3.5 registry key found."
+        } else {
+          Write-Host "Warning: v3.5 registry key not found."
+        }
+
+    - name: Check for .NET 3.5 reference assemblies
+      id: checkref
+      shell: powershell
+      run: |
+        $refPath = 'C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v3.5'
+        Write-Host "Checking reference assemblies at $refPath"
+        if (Test-Path $refPath) {
+          Write-Host "Reference assemblies FOUND."
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "present=true"
+        } else {
+          Write-Host "Reference assemblies MISSING."
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "present=false"
+        }
+
+    - name: Install Visual Studio Build Tools (if refs missing)
+      if: steps.checkref.outputs.present == 'false'
+      shell: powershell
+      run: |
+        Write-Host "Reference assemblies missing - installing Visual Studio Build Tools with .NET 3.5 Developer Tools..."
+        $vsBootstrapUrl = "https://aka.ms/vs/17/release/vs_buildtools.exe"
+        $installer = Join-Path $env:TEMP "vs_buildtools.exe"
+        Invoke-WebRequest -Uri $vsBootstrapUrl -OutFile $installer -UseBasicParsing
+
+        $installPath = Join-Path $env:ProgramFiles "Microsoft Visual Studio\2022\BuildTools"
+        $argArray = @(
+          '--quiet'
+          '--wait'
+          '--norestart'
+          '--nocache'
+          '--installPath', $installPath
+          '--add', 'Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools'
+          '--add', 'Microsoft.Net.Component.3.5.DeveloperTools'
+        )
+
+        Write-Host "Running installer..."
+        $proc = Start-Process -FilePath $installer -ArgumentList $argArray -Wait -NoNewWindow -PassThru
+        if ($proc.ExitCode -ne 0) {
+          Write-Host "Installer failed with exit code $($proc.ExitCode)."
+          exit $proc.ExitCode
+        }
+
+        Remove-Item $installer -Force -ErrorAction SilentlyContinue
+
+        $refPath = 'C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v3.5'
+        if (Test-Path $refPath) {
+          Write-Host "Reference assemblies are now present."
+        } else {
+          Write-Host "ERROR: Reference assemblies still missing after install."
+          exit 1
+        }
+
+    - name: Setup .NET SDK
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '7.0.x'
@@ -29,4 +99,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        path: Sharpmad/bin/Release/**/Sharpmad.exe

@@ -1,5 +1,6 @@
 name: Build SharpMad
 
+# Trigger bij push naar main of handmatig
 on:
   push:
     branches:
@@ -17,7 +18,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '7.0.x'  # voor dotnet CLI
 
     - name: Restore dependencies
       run: dotnet restore Sharpmad.sln
@@ -28,5 +29,8 @@ jobs:
     - name: Upload SharpMad.exe
       uses: actions/upload-artifact@v4
       with:
-        name: SharpMad
-        path: Sharpmad/bin/Release/net7.0/Sharpmad.exe
+        name: Sharpmad-Release
+        path: Sharpmad/bin/Release/**/*.exe
+        if-no-files-found: warn
+        compression-level: 6
+        overwrite: true
